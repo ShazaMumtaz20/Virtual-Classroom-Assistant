@@ -1,0 +1,100 @@
+Virtual Classroom Assistant (VCA) Backend and RAG Report
+
+1. Project Overview
+This project is the backend for a Virtual Classroom Assistant that will be connected to a Unity frontend later. The goal is to provide an AI tutor that can answer student questions about course material, accept spoken questions, convert responses to speech, and return a diagram identifier that Unity can use to show a relevant visual on a whiteboard.
+The current backend is built in Python with FastAPI and is organized as a small AI pipeline:
+1. Student question or speech is received by the API.
+2. Speech is transcribed locally with Whisper.
+3. The question is embedded with Sentence-Transformers.
+4. ChromaDB retrieves the most relevant course chunks.
+5. GPT-4o-mini generates the answer using the retrieved context and chat history.
+6. The answer is scanned for diagram keywords.
+7. Text can be converted to audio with TTS.
+This means the backend already provides the main service layer that Unity can call later.
+
+2. What Each File Does
+main.py
+This is the FastAPI server. It exposes:
+- /health to confirm the service is running and to report vector DB status.
+- /ask for the main RAG question-answering flow.
+- /transcribe for speech-to-text.
+- /tts for text-to-speech.
+It also enables CORS so a Unity client can call the backend without browser-style cross-origin issues.
+
+rag_engine.py
+This module handles retrieval. It loads the local embedding model all-MiniLM-L6-v2, opens a persistent ChromaDB database, and retrieves the top 3 matching chunks for a user question.
+
+ingest.py
+This is the offline ingestion script. It loads .txt files and optionally .pdf files from the data folder, splits them into chunks, embeds them, and stores them in ChromaDB.
+
+stt_handler.py
+This module handles speech-to-text using OpenAI Whisper locally. Audio is written to a temporary WAV file and transcribed on the machine.
+
+llm_handler.py
+This module calls GPT-4o-mini through the OpenAI API. It wraps the retrieved context inside a system prompt that tells the model to answer only from course notes and to refuse if the notes do not contain enough information.
+
+tts_handler.py
+This module converts text to speech. By default it uses pyttsx3 locally, and it also contains an optional ElevenLabs branch controlled by an environment variable.
+
+diagram_keywords.py
+This module looks for keywords in the generated response and maps them to a diagram_id so Unity can decide which whiteboard visual to display.
+
+3. Current Backend and RAG Architecture
+The current architecture is a practical minimum viable AI tutor backend. It already supports the most important backend responsibilities:
+- Receiving a user question.
+- Retrieving relevant knowledge from a local vector store.
+- Generating an answer with an LLM.
+- Returning a diagram hint for the frontend.
+- Accepting voice input.
+- Producing spoken output.
+The RAG design is simple but valid. The course material is chunked, embedded, and stored in ChromaDB. At query time, the question is embedded again and the closest chunks are retrieved and passed into the model. This is the core pattern needed for grounded course-specific answers.
+
+4. Requirement Audit
+Overall verdict: the backend is partially complete. It does not yet fulfill all of the requirements from your abstract and project statement, but it does fulfill the basic backend and core RAG pipeline structure.
+Implemented
+- FastAPI backend with /ask, /transcribe, /tts, and /health.
+- Local Whisper speech- to- text.
+- Local embedding model with Sentence- Transformers.
+- Persistent ChromaDB vector store.
+- Retrieval- augmented answer generation.
+- Chat history support in /ask.
+- Offline TTS through pyttsx3 by default.
+- CORS enabled for Unity integration.
+- Diagram ID output support through keyword detection.
+
+Partially implemented
+- RAG grounding: the system uses retrieved course context, but it does not yet prove zero hallucinations. The prompt reduces hallucination risk, but it cannot guarantee it.
+- Diagram support: the backend can return a diagram_id, but the current keyword map is not yet aligned with your Database Systems topic set such as ER diagrams, SQL, normalization, transactions, indexing, and B-trees.
+- PDF ingestion: ingest.py supports PDFs, but pypdf is not listed in requirements.txt, so PDF support is not fully ready out of the box.
+- TTS cloud fallback: ElevenLabs support exists, but it is optional and not the main documented path.
+
+Missing or not yet fulfilled
+- Local Llama 3.1 fallback is implemented in the current code. The LLM path now tries GPT-4o-mini first and falls back to a local Ollama/Llama 3.1 endpoint if needed.
+- Database Systems course notes are now expected to be provided through PDF upload and indexed through the ingestion pipeline. The backend no longer depends on bundled sample text files for the main workflow.
+- Visual whiteboard asset logic is implemented in the backend. The backend now returns a diagram_id plus a visual_asset descriptor that Unity can map to ER diagrams, normalization tables, SQL graphics, or B-tree assets.
+- Response confidence is only a placeholder value. It is not a real retrieval score or hallucination metric.
+- No testing, latency benchmarking, or evaluation pipeline is included in the code.
+- Meta Quest VR support is not implemented in this backend repository. That will need Unity-side work.
+
+5. Does It Fulfill All Your Backend and RAG Requirements?
+Mostly yes.
+It now satisfies the core backend shape for a Unity-connected assistant and the basic RAG workflow, including the local Llama fallback and backend visual asset descriptors. The remaining gaps are more advanced evaluation, richer confidence scoring, and any Unity-side rendering work for the returned assets.
+
+6. What Unity Can Connect To Later
+The Unity frontend can connect to this backend through three main calls:
+- /ask for typed questions and AI answers.
+- /transcribe for microphone audio.
+- /tts for spoken responses.
+This is enough for Unity to handle avatar speech, subtitles, and whiteboard visuals on the client side. The backend already returns the information Unity needs for those features.
+
+7. Recommended Next Steps
+- Expand the Database Systems corpus with additional chapter-level notes and examples.
+- Add the local Ollama + Llama 3.1 fallback path.
+- Expand diagram_keywords.py so it matches Database Systems topics.
+- Add pypdf to requirements.txt if PDF ingestion is required.
+- Add retrieval confidence or source citation metadata if you want more transparency.
+- Build a Unity response mapper that translates diagram_id values into actual whiteboard assets.
+- Add test cases for /ask, /transcribe, /tts, and ingestion.
+
+8. Short Conclusion
+The current project is a solid backend foundation for a virtual classroom assistant, and the RAG pipeline is correctly structured. The remaining gaps are the evaluation pipeline, tighter confidence reporting, and Unity-side whiteboard rendering of the returned asset descriptors.
