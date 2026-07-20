@@ -1,27 +1,35 @@
 # Virtual Classroom Assistant Backend
 
-AI-powered backend for a virtual classroom tutor that supports voice questions, retrieval-augmented answers, text-to-speech, and diagram-aware responses for a Unity frontend.
+AI-powered backend for a virtual classroom tutor that supports typed questions, retrieval-augmented answers, text-to-speech, and diagram-aware responses for an avatar-style experience.
 
 ## Overview
 
 This project provides the backend services for an AI teaching assistant that can:
 
 - receive student questions through a REST API
-- transcribe spoken questions with Whisper
 - retrieve relevant course content from a local vector database
 - generate grounded answers using an LLM
 - return a diagram identifier and visual asset hint for frontend rendering
 - speak responses back to the user with TTS
 
+## Current Scope
+
+For now, the system is focused on:
+
+- typed chat interaction only
+- avatar speech output via text-to-speech
+- local RAG-based question answering
+- course content ingestion from text or PDF files
+
+Speech-to-text is not required in the current version.
+
 ## Features
 
 - FastAPI server with health and chat endpoints
-- Speech-to-text support using Whisper
 - Retrieval-augmented generation (RAG) with ChromaDB and sentence embeddings
 - OpenAI GPT support with local Ollama fallback
 - Text-to-speech support via pyttsx3
 - PDF ingestion for course notes
-- CORS enabled for Unity integration
 
 ## Project Structure
 
@@ -29,7 +37,6 @@ This project provides the backend services for an AI teaching assistant that can
 - rag_engine.py: retrieval logic and vector database access
 - ingest.py: document ingestion and chunk indexing
 - llm_handler.py: LLM response generation and fallback logic
-- stt_handler.py: speech-to-text processing
 - tts_handler.py: text-to-speech processing
 - diagram_keywords.py: diagram detection from assistant responses
 - visual_assets.py: mapping of diagram IDs to visual asset metadata
@@ -91,10 +98,6 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
   - accepts a question and optional chat history
   - returns the answer, diagram hint, visual asset info, and confidence
 
-### Speech-to-Text
-- POST /transcribe
-  - accepts an audio file upload
-
 ### Text-to-Speech
 - POST /tts
   - accepts text and returns a WAV audio response
@@ -106,8 +109,8 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
 ## Notes
 
 - The vector database is stored locally in the chroma_db folder.
-- The project is designed to be connected to a Unity frontend later.
-- The current implementation focuses on a practical backend MVP for classroom tutoring and RAG-based assistance.
+- The current implementation focuses on typed chat interaction and avatar speech output.
+- Unity integration is not required for the current version.
 
 ## License
 
