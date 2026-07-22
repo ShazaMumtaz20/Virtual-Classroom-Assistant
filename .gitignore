@@ -3,3 +3,8 @@
 __pycache__/
 *.pyc
 venv/
+# Uploaded files
+data/uploads/
+
+# Chroma vector database
+chroma_db/
