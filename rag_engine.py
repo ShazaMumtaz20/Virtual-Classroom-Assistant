@@ -16,6 +16,16 @@ chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
 collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
 
 
+def _get_collection():
+    """Refresh collection handle after ingestion recreates it."""
+    global collection
+    try:
+        collection = chroma_client.get_collection(COLLECTION_NAME)
+    except Exception:
+        collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+    return collection
+
+
 def embed_text(text: str) -> list[float]:
     """Embed a single string into a vector using the local model."""
     return embed_model.encode(text).tolist()
@@ -35,7 +45,8 @@ def retrieve_context_bundle(question: str, top_k: int = TOP_K) -> dict:
     Returns the retrieved context together with a lightweight retrieval
     confidence estimate based on the nearest ChromaDB distance.
     """
-    if collection.count() == 0:
+    active_collection = _get_collection()
+    if active_collection.count() == 0:
         return {
             "context": "No course content has been ingested yet. Please run ingest.py first.",
             "retrieval_confidence": 0.0,
@@ -43,9 +54,9 @@ def retrieve_context_bundle(question: str, top_k: int = TOP_K) -> dict:
         }
 
     query_vector = embed_text(question)
-    results = collection.query(
+    results = active_collection.query(
         query_embeddings=[query_vector],
-        n_results=min(top_k, collection.count()),
+        n_results=min(top_k, active_collection.count()),
         include=["documents", "distances"]
     )
 
@@ -77,4 +88,7 @@ def retrieve_context(question: str, top_k: int = TOP_K) -> str:
 
 def get_collection_count() -> int:
     """Returns the number of documents currently stored in ChromaDB."""
-    return collection.count()
+    try:
+        return _get_collection().count()
+    except Exception:
+        return 0

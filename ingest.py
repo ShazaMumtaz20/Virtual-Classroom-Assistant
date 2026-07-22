@@ -5,7 +5,6 @@
 import os
 import glob
 from pathlib import Path
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 import chromadb
 
@@ -15,6 +14,7 @@ COLLECTION_NAME = "course_notes"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 400       # tokens approx
 CHUNK_OVERLAP = 50
+BATCH_SIZE = 128
 
 
 def _load_pdf_reader_text(filepath: str) -> str:
@@ -56,14 +56,18 @@ def load_pdf_file(filepath: str) -> str:
 
 
 def build_chunks(raw_texts: list[str]) -> list[str]:
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        length_function=len,
-    )
     all_chunks = []
     for text in raw_texts:
-        all_chunks.extend(splitter.split_text(text))
+        start = 0
+        text_length = len(text)
+        while start < text_length:
+            end = min(start + CHUNK_SIZE, text_length)
+            chunk = text[start:end].strip()
+            if chunk:
+                all_chunks.append(chunk)
+            if end >= text_length:
+                break
+            start = max(0, end - CHUNK_OVERLAP)
     return all_chunks
 
 
@@ -97,10 +101,7 @@ def ingest_texts(raw_texts: list[str], clear_existing: bool = True) -> int:
     print("[3] Loading embedding model ...")
     model = SentenceTransformer(EMBED_MODEL)
 
-    print("[4] Embedding all chunks ...")
-    embeddings = model.encode(all_chunks, show_progress_bar=True).tolist()
-
-    print("\n[5] Storing in ChromaDB ...")
+    print("[4] Embedding and storing chunks in batches ...")
     client = chromadb.PersistentClient(path=CHROMA_PATH)
 
     if clear_existing:
@@ -111,8 +112,13 @@ def ingest_texts(raw_texts: list[str], clear_existing: bool = True) -> int:
             pass
 
     collection = client.create_collection(COLLECTION_NAME)
-    ids = [f"chunk_{i}" for i in range(len(all_chunks))]
-    collection.add(documents=all_chunks, embeddings=embeddings, ids=ids)
+
+    for start_index in range(0, len(all_chunks), BATCH_SIZE):
+        batch_chunks = all_chunks[start_index:start_index + BATCH_SIZE]
+        batch_embeddings = model.encode(batch_chunks, show_progress_bar=False).tolist()
+        batch_ids = [f"chunk_{i}" for i in range(start_index, start_index + len(batch_chunks))]
+        collection.add(documents=batch_chunks, embeddings=batch_embeddings, ids=batch_ids)
+        print(f"  Stored chunks {start_index + 1}-{start_index + len(batch_chunks)} / {len(all_chunks)}")
 
     print(f"\nIngestion complete. {len(all_chunks)} chunks stored in ChromaDB.")
     print(f"   Vector DB saved to: {CHROMA_PATH}")

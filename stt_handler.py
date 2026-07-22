@@ -1,11 +1,26 @@
 # stt_handler.py
 
-import whisper
-import tempfile
 import os
+import tempfile
 
-# Load Whisper model once at startup. Use "base" for speed; "small" for better accuracy.
-whisper_model = whisper.load_model("base")
+try:
+    import whisper
+except ImportError:
+    whisper = None
+
+whisper_model = None
+
+
+def _get_whisper_model():
+    global whisper_model
+
+    if whisper is None:
+        raise RuntimeError("openai-whisper is not installed")
+
+    if whisper_model is None:
+        whisper_model = whisper.load_model("base")
+
+    return whisper_model
 
 
 def transcribe_audio(audio_bytes: bytes) -> dict:
@@ -23,7 +38,8 @@ def transcribe_audio(audio_bytes: bytes) -> dict:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
 
-        result = whisper_model.transcribe(tmp_path, fp16=False)
+        model = _get_whisper_model()
+        result = model.transcribe(tmp_path, fp16=False)
         os.unlink(tmp_path)  # Clean up temp file
 
         text = result.get("text", "").strip()
