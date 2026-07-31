@@ -95,6 +95,3 @@ This is enough for Unity to handle avatar speech, subtitles, and whiteboard visu
 - Add retrieval confidence or source citation metadata if you want more transparency.
 - Build a Unity response mapper that translates diagram_id values into actual whiteboard assets.
 - Add test cases for /ask, /transcribe, /tts, and ingestion.
-
-8. Short Conclusion
-The current project is a solid backend foundation for a virtual classroom assistant, and the RAG pipeline is correctly structured. The remaining gaps are the evaluation pipeline, tighter confidence reporting, and Unity-side whiteboard rendering of the returned asset descriptors.
