@@ -1,7 +1,40 @@
 # stt_handler.py
 
+import glob
 import os
+import shutil
 import tempfile
+
+
+def _ensure_ffmpeg_on_path():
+    """
+    Whisper doesn't decode audio itself; it shells out to the "ffmpeg" binary.
+    On Windows, a freshly-installed winget package can be missing from PATH for
+    the current process even after the registry is updated (Windows Terminal /
+    PowerShell tabs often keep the environment they started with instead of
+    re-reading it). Rather than depend on the user restarting their terminal
+    correctly, check for ffmpeg here and, if it's not resolvable, look in the
+    standard winget install location and add it to THIS process's PATH.
+    """
+    if shutil.which("ffmpeg"):
+        return  # Already resolvable - nothing to do.
+
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if not local_app_data:
+        return
+
+    pattern = os.path.join(
+        local_app_data, "Microsoft", "WinGet", "Packages",
+        "Gyan.FFmpeg_*", "ffmpeg-*-full_build", "bin", "ffmpeg.exe"
+    )
+    matches = glob.glob(pattern)
+    if matches:
+        ffmpeg_dir = os.path.dirname(matches[0])
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+        print(f"[STT] ffmpeg was not on PATH; added it for this process: {ffmpeg_dir}")
+
+
+_ensure_ffmpeg_on_path()
 
 try:
     import whisper
