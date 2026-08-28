@@ -6,6 +6,8 @@ chromadb==0.5.0
 numpy==1.26.4
 sentence-transformers==3.0.0
 pyttsx3==2.90
+edge-tts
+openai-whisper
 python-multipart==0.0.9
 python-dotenv
 langchain-text-splitters

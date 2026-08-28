@@ -3,6 +3,7 @@
 import glob
 import os
 import shutil
+import subprocess
 import tempfile
 
 
@@ -25,7 +26,7 @@ def _ensure_ffmpeg_on_path():
 
     pattern = os.path.join(
         local_app_data, "Microsoft", "WinGet", "Packages",
-        "Gyan.FFmpeg_*", "ffmpeg-*-full_build", "bin", "ffmpeg.exe"
+        "Gyan.FFmpeg*", "ffmpeg-*-*_build", "bin", "ffmpeg.exe"
     )
     matches = glob.glob(pattern)
     if matches:
@@ -56,24 +57,56 @@ def _get_whisper_model():
     return whisper_model
 
 
-def transcribe_audio(audio_bytes: bytes) -> dict:
+def transcribe_audio(
+    audio_bytes: bytes,
+    content_type: str | None = None,
+    filename: str | None = None,
+) -> dict:
     """
-    Accepts raw WAV audio as bytes.
-    Saves to a temp file, runs Whisper transcription, cleans up.
+    Accepts an uploaded audio recording, normalizes it to mono 16 kHz PCM,
+    and runs Whisper transcription.
     Returns {"text": str, "language": str} or {"text": "", "error": str}.
     """
     if len(audio_bytes) < 1000:
         return {"text": "", "error": "Audio too short or empty"}
 
+    source_suffix = ".wav"
+    if content_type in {"audio/webm", "video/webm"}:
+        source_suffix = ".webm"
+    elif content_type in {"audio/ogg", "application/ogg"}:
+        source_suffix = ".ogg"
+    elif content_type == "audio/mpeg":
+        source_suffix = ".mp3"
+    elif filename and "." in filename:
+        source_suffix = os.path.splitext(filename)[1].lower() or source_suffix
+
+    source_path = None
+    normalized_path = None
     try:
-        # Write audio bytes to a temp WAV file (Whisper requires a file path)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=source_suffix, delete=False) as tmp:
             tmp.write(audio_bytes)
-            tmp_path = tmp.name
+            source_path = tmp.name
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            normalized_path = tmp.name
+
+        conversion = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-i", source_path,
+                "-vn", "-ac", "1", "-ar", "16000",
+                "-c:a", "pcm_s16le", normalized_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if conversion.returncode != 0:
+            detail = conversion.stderr.strip() or "unsupported or incomplete audio"
+            return {"text": "", "error": f"Audio conversion failed: {detail}"}
 
         model = _get_whisper_model()
-        result = model.transcribe(tmp_path, fp16=False)
-        os.unlink(tmp_path)  # Clean up temp file
+        result = model.transcribe(normalized_path, fp16=False)
 
         text = result.get("text", "").strip()
         language = result.get("language", "unknown")
@@ -86,3 +119,10 @@ def transcribe_audio(audio_bytes: bytes) -> dict:
     except Exception as e:
         print(f"[STT ERROR] {e}")
         return {"text": "", "error": str(e)}
+    finally:
+        for path in (source_path, normalized_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass

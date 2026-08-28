@@ -6,7 +6,7 @@ AI-powered backend for a virtual classroom tutor that supports typed questions, 
 
 This project provides the backend services for an AI teaching assistant that can:
 
-- receive student questions through a REST API
+- receive student questions through a REST API, including browser microphone recordings
 - retrieve relevant course content from a local vector database
 - generate grounded answers using an LLM
 - return a diagram identifier and visual asset hint for frontend rendering
@@ -61,6 +61,8 @@ OPENAI_API_KEY=your_openai_key
 OPENAI_MODEL=gpt-4o-mini
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1
+TTS_ENGINE=edge
+TTS_VOICE=en-US-JennyNeural
 ```
 
 If OpenAI credentials are not available, the app can still fall back to a local Ollama instance when configured.
@@ -91,18 +93,32 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
 ## API Endpoints
 
 ### Health Check
+
 - GET /health
 
 ### Ask a Question
+
 - POST /ask
   - accepts a question and optional chat history
   - returns the answer, diagram hint, visual asset info, and confidence
 
 ### Text-to-Speech
+
 - POST /tts
-  - accepts text and returns a WAV audio response
+  - accepts text and returns a WAV audio response using a neural voice by default
+  - set `TTS_ENGINE=pyttsx3` for offline fallback speech
+  - set `TTS_VOICE` to another Edge neural voice when needed
+
+### Speech-to-Text
+
+- POST /transcribe
+  - accepts a multipart field named `audio`
+  - accepts WAV, WebM/Opus, OGG, and MP3 recordings
+  - normalizes the recording to mono 16 kHz PCM before Whisper transcription
+  - send one complete recording blob; do not POST individual `MediaRecorder` timeslice chunks
 
 ### PDF Ingestion
+
 - POST /ingest/pdf
   - uploads and indexes a PDF into the vector store
 
