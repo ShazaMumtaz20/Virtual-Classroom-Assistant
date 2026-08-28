@@ -1,20 +1,23 @@
 # tts_handler.py
 
+import asyncio
 import os
 import pyttsx3
+import subprocess
 import tempfile
 
-TTS_ENGINE = os.getenv("TTS_ENGINE", "pyttsx3")
+TTS_ENGINE = os.getenv("TTS_ENGINE", "edge")
+TTS_VOICE = os.getenv("TTS_VOICE", "en-US-JennyNeural")
 
 # Simple cache for common phrases to avoid regenerating audio repeatedly
 _tts_cache: dict[str, bytes] = {}
 
 
-def text_to_speech(text: str) -> bytes:
+async def text_to_speech(text: str) -> bytes:
     """
-    Converts text to WAV audio bytes.
-    Uses pyttsx3 (offline) by default.
-    Switch TTS_ENGINE env var to "elevenlabs" for demo day.
+    Converts text to natural-sounding WAV audio bytes.
+    Uses Microsoft Edge's neural voice by default. Set TTS_ENGINE=pyttsx3
+    for offline speech or TTS_ENGINE=elevenlabs for ElevenLabs.
     Returns raw WAV bytes.
     """
     text = text.strip()[:500]  # Cap at 500 characters
@@ -22,7 +25,9 @@ def text_to_speech(text: str) -> bytes:
     if text in _tts_cache:
         return _tts_cache[text]
 
-    if TTS_ENGINE == "elevenlabs":
+    if TTS_ENGINE == "edge":
+        audio_bytes = await _edge_tts(text)
+    elif TTS_ENGINE == "elevenlabs":
         audio_bytes = _elevenlabs_tts(text)
     else:
         audio_bytes = _pyttsx3_tts(text)
@@ -31,6 +36,37 @@ def text_to_speech(text: str) -> bytes:
         _tts_cache[text] = audio_bytes
 
     return audio_bytes
+
+
+async def _edge_tts(text: str) -> bytes:
+    """Generate neural speech and convert it to WAV for the existing API contract."""
+    try:
+        import edge_tts
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mp3_path = os.path.join(temp_dir, "speech.mp3")
+            wav_path = os.path.join(temp_dir, "speech.wav")
+            communicate = edge_tts.Communicate(text, TTS_VOICE)
+            await communicate.save(mp3_path)
+
+            conversion = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-i", mp3_path,
+                    "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", wav_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if conversion.returncode != 0:
+                raise RuntimeError(conversion.stderr.strip() or "FFmpeg conversion failed")
+
+            with open(wav_path, "rb") as audio_file:
+                return audio_file.read()
+    except Exception as error:
+        print(f"[TTS Edge ERROR] {error}. Falling back to pyttsx3.")
+        return _pyttsx3_tts(text)
 
 
 def _pyttsx3_tts(text: str) -> bytes:

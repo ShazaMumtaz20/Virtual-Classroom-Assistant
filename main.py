@@ -116,7 +116,7 @@ async def ask(request: AskRequest):
 @app.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...)):
     """
-    STT endpoint. Unity uploads a WAV file as multipart form data.
+    STT endpoint. Clients may upload WAV, WebM/Opus, OGG, or MP3 recordings.
     Returns: { "text": "transcribed text", "language": "en" }
     """
     if audio.content_type not in ["audio/wav", "audio/wave", "application/octet-stream"]:
@@ -124,7 +124,11 @@ async def transcribe(audio: UploadFile = File(...)):
         pass
 
     audio_bytes = await audio.read()
-    result = transcribe_audio(audio_bytes)
+    result = transcribe_audio(
+        audio_bytes,
+        content_type=audio.content_type,
+        filename=audio.filename,
+    )
 
     if "error" in result and not result.get("text"):
         return {"text": "", "error": result["error"]}
@@ -138,7 +142,7 @@ async def tts(request: TTSRequest):
     TTS endpoint. Returns raw WAV audio bytes.
     Unity receives this as binary and loads it into an AudioClip.
     """
-    audio_bytes = text_to_speech(request.text)
+    audio_bytes = await text_to_speech(request.text)
 
     if not audio_bytes:
         raise HTTPException(status_code=500, detail="TTS generation failed")
