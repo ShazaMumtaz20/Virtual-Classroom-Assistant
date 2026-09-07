@@ -1,7 +1,7 @@
 """Visual asset metadata for Unity whiteboard rendering.
 
-The backend does not render the assets itself. It returns a stable asset
-descriptor that Unity can map to its own sprites, prefabs, or scene objects.
+Fixed diagram types return stable asset descriptors. ER responses may add
+inline generated PNG data to the descriptor for Unity to decode directly.
 """
 
 VISUAL_ASSET_MAP = {

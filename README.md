@@ -9,7 +9,7 @@ This project provides the backend services for an AI teaching assistant that can
 - receive student questions through a REST API, including browser microphone recordings
 - retrieve relevant course content from a local vector database
 - generate grounded answers using an LLM
-- return a diagram identifier and visual asset hint for frontend rendering
+- return a diagram identifier and a generated ER diagram image when the answer contains ER content
 - speak responses back to the user with TTS
 
 ## Current Scope
@@ -101,6 +101,7 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
 - POST /ask
   - accepts a question and optional chat history
   - returns the answer, diagram hint, visual asset info, and confidence
+  - for db_er_diagram, visual_asset.image_base64 contains a generated PNG based on the answer; other diagram types continue to return their fixed asset descriptor
 
 ### Text-to-Speech
 

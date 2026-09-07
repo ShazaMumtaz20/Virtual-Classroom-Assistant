@@ -1,6 +1,7 @@
 # llm_handler.py
 
 import asyncio
+import base64
 import json
 import os
 from urllib.error import URLError
@@ -9,6 +10,7 @@ from urllib.request import Request, urlopen
 from openai import AsyncOpenAI
 
 from diagram_keywords import detect_diagram
+from diagram_renderer import render_er_diagram
 from visual_assets import resolve_visual_asset
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -27,6 +29,22 @@ Keep responses under 150 words. Speak directly to the student. Avoid markdown fo
 MAX_HISTORY_TURNS = 6  # Max conversation turns to include in context (3 pairs)
 
 FALLBACK_RESPONSE = "I'm having trouble connecting to my knowledge base right now. Please try again in a moment."
+
+ER_EXTRACTION_PROMPT = """Extract the ER diagram content from the assistant answer below.
+Return only valid JSON with this exact shape:
+{
+    "title": "short title",
+    "entities": [
+        {"name": "TableName", "attributes": [{"name": "column_name", "key": "PK|FK|UK|"}]}
+    ],
+    "relationships": [
+        {"from": "TableName", "to": "OtherTable", "label": "verb phrase", "cardinality": "1:N|1:1|N:M"}
+    ]
+}
+Use only names, attributes, and relationships explicitly stated or clearly used as examples in the answer. If details are missing, return empty arrays. Keep at most 8 entities and 12 relationships. Do not include markdown fences.
+
+Assistant answer:
+"""
 
 
 def _build_messages(question: str, context: str, history: list[dict] | None = None) -> list[dict]:
@@ -51,6 +69,43 @@ async def _call_openai(messages: list[dict]) -> str:
         temperature=0.4,
     )
     return response.choices[0].message.content.strip()
+
+
+async def _extract_er_diagram(response_text: str) -> dict:
+    if client is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    response = await client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You extract structured data for deterministic technical diagrams."},
+            {"role": "user", "content": f"{ER_EXTRACTION_PROMPT}{response_text}"},
+        ],
+        response_format={"type": "json_object"},
+        max_tokens=700,
+        temperature=0,
+    )
+    payload = json.loads(response.choices[0].message.content)
+    if not isinstance(payload, dict) or not isinstance(payload.get("entities"), list):
+        raise ValueError("Invalid ER diagram JSON")
+    return payload
+
+
+async def _add_generated_diagram(visual_asset: dict[str, str] | None, diagram_id: str | None, response_text: str) -> dict[str, str] | None:
+    if not visual_asset or diagram_id != "db_er_diagram":
+        return visual_asset
+
+    try:
+        diagram_data = await _extract_er_diagram(response_text)
+        png_bytes = render_er_diagram(diagram_data)
+        generated_asset = dict(visual_asset)
+        generated_asset["generated"] = "true"
+        generated_asset["mime_type"] = "image/png"
+        generated_asset["image_base64"] = base64.b64encode(png_bytes).decode("ascii")
+        return generated_asset
+    except Exception as diagram_error:
+        print(f"[DIAGRAM GENERATION ERROR] {diagram_error}")
+        return visual_asset
 
 
 def _call_ollama_sync(messages: list[dict]) -> str:
@@ -117,6 +172,7 @@ async def generate_response(
 
     diagram_id = detect_diagram(response_text)
     visual_asset = resolve_visual_asset(diagram_id)
+    visual_asset = await _add_generated_diagram(visual_asset, diagram_id, response_text)
     return response_text, diagram_id, visual_asset
 
 

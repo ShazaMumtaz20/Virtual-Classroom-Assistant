@@ -12,3 +12,4 @@ python-multipart==0.0.9
 python-dotenv
 langchain-text-splitters
 pypdf
+matplotlib
