@@ -9,3 +9,5 @@ data/uploads/
 
 # Chroma vector database
 chroma_db/
+
+Claude outputs/

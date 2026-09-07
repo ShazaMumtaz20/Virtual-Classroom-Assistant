@@ -4,6 +4,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import uvicorn
@@ -33,6 +34,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serves the whiteboard diagram PNGs (whiteboard/db_er_diagram.png, etc.) so
+# Unity can GET them directly. resolve_visual_asset() in visual_assets.py
+# already returns paths like "whiteboard/db_er_diagram.png" that match this
+# mount 1:1 - Unity just requests {base_url}/{asset_file}.
+whiteboard_dir = Path("whiteboard")
+whiteboard_dir.mkdir(exist_ok=True)
+app.mount("/whiteboard", StaticFiles(directory=str(whiteboard_dir)), name="whiteboard")
 
 # --- Pydantic Models ---
 
