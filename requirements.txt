@@ -13,3 +13,6 @@ python-dotenv
 langchain-text-splitters
 pypdf
 matplotlib
+requests
+google-generativeai
+Pillow

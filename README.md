@@ -9,7 +9,7 @@ This project provides the backend services for an AI teaching assistant that can
 - receive student questions through a REST API, including browser microphone recordings
 - retrieve relevant course content from a local vector database
 - generate grounded answers using an LLM
-- return a diagram identifier and a generated ER diagram image when the answer contains ER content
+- classify the question and answer with an LLM, then return a diagram identifier and a generated ER diagram image when appropriate
 - speak responses back to the user with TTS
 
 ## Current Scope
@@ -21,7 +21,6 @@ For now, the system is focused on:
 - local RAG-based question answering
 - course content ingestion from text or PDF files
 
-Speech-to-text is not required in the current version.
 
 ## Features
 
@@ -30,6 +29,8 @@ Speech-to-text is not required in the current version.
 - OpenAI GPT support with local Ollama fallback
 - Text-to-speech support via pyttsx3
 - PDF ingestion for course notes
+- LLM-based diagram classification
+- Deterministic ER diagram rendering with matplotlib
 
 ## Project Structure
 
@@ -37,9 +38,11 @@ Speech-to-text is not required in the current version.
 - rag_engine.py: retrieval logic and vector database access
 - ingest.py: document ingestion and chunk indexing
 - llm_handler.py: LLM response generation and fallback logic
+- diagram_renderer.py: deterministic matplotlib renderer for structured ER data
 - tts_handler.py: text-to-speech processing
-- diagram_keywords.py: diagram detection from assistant responses
+- diagram_keywords.py: legacy keyword detector retained for reference; the live pipeline uses LLM classification in llm_handler.py
 - visual_assets.py: mapping of diagram IDs to visual asset metadata
+- whiteboard/: fixed assets and generated diagram PNG files
 - data/: course content and uploaded files
 
 ## Requirements
@@ -66,6 +69,21 @@ TTS_VOICE=en-US-JennyNeural
 ```
 
 If OpenAI credentials are not available, the app can still fall back to a local Ollama instance when configured.
+
+## Dynamic Diagrams
+
+The live diagram flow is not based on keyword matching. After the main answer is generated, a second LLM call classifies the user's intent and answer as one of the supported diagram types:
+
+- `db_er_diagram`
+- `db_sql_query`
+- `db_normalization`
+- `db_transactions`
+- `db_indexing`
+- `db_relational_model`
+
+ER answers receive an additional structured extraction call. That call returns entities, attributes, relationships, and cardinality as JSON. `diagram_renderer.py` uses the JSON to draw a deterministic PNG with matplotlib. No image-generation model or Graphviz binary is used.
+
+The ER renderer is implemented and tested. The other five types are classified by the LLM but currently use their existing fixed visual assets until their JSON schemas and matplotlib renderers are added.
 
 ## Running the Server
 
@@ -101,7 +119,38 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
 - POST /ask
   - accepts a question and optional chat history
   - returns the answer, diagram hint, visual asset info, and confidence
-  - for db_er_diagram, visual_asset.image_base64 contains a generated PNG based on the answer; other diagram types continue to return their fixed asset descriptor
+  - for `db_er_diagram`, `visual_asset.image_base64` contains a generated PNG based on the answer
+  - generated ER files are also available at `visual_asset.asset_file` under `/whiteboard`
+  - other diagram types currently return their fixed asset descriptor
+
+Example request:
+
+```json
+{
+  "question": "Explain an ER relationship between Customers and Orders",
+  "history": []
+}
+```
+
+Example generated response fields:
+
+```json
+{
+  "diagram_id": "db_er_diagram",
+  "visual_asset": {
+    "asset_file": "whiteboard/generated/<generated-id>.png",
+    "generated": "true",
+    "mime_type": "image/png",
+    "image_base64": "<base64 PNG data>"
+  }
+}
+```
+
+Unity can either decode `image_base64` directly or request:
+
+```text
+http://<backend-host>:8000/whiteboard/generated/<generated-id>.png
+```
 
 ### Text-to-Speech
 
@@ -123,11 +172,30 @@ You can also upload a PDF through the API endpoint /ingest/pdf.
 - POST /ingest/pdf
   - uploads and indexes a PDF into the vector store
 
+## Testing Dynamic ER Diagrams
+
+Start the server with the project's virtual environment:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Submit an ER question from another PowerShell window:
+
+```powershell
+$body = @{ question = "Explain an ER relationship between Customers and Orders"; history = @() } | ConvertTo-Json
+$result = Invoke-RestMethod -Uri "http://127.0.0.1:8000/ask" -Method Post -ContentType "application/json" -Body $body
+$result | ConvertTo-Json -Depth 5
+```
+
+The response should contain `diagram_id: "db_er_diagram"`, `generated: "true"`, and a non-empty `image_base64` value. A valid OpenAI API key must be configured in `.env` for the LLM calls.
+
 ## Notes
 
 - The vector database is stored locally in the chroma_db folder.
-- The current implementation focuses on typed chat interaction and avatar speech output.
-- Unity integration is not required for the current version.
+- Generated diagram files are written to `whiteboard/generated/` at runtime.
+- ChromaDB telemetry warnings do not prevent the API or diagram renderer from working.
 
 ## License
 
