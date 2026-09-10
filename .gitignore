@@ -9,5 +9,6 @@ data/uploads/
 
 # Chroma vector database
 chroma_db/
-
+whiteboard/audio/
+whiteboard/generated/
 Claude outputs/
